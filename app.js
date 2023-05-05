@@ -4,6 +4,7 @@ const app = express();
 const cookieParser = require("cookie-parser");
 const bodyParser = require("body-parser");
 const cors = require("cors");
+const path = require("path");
 
 // config
 if (process.env.NODE_ENV !== "PRODUCTION") {
@@ -20,7 +21,10 @@ app.use(
     credentials: true,
   })
 );
-app.use("/", express.static("uploads"));
+app.use("/", express.static(path.join(__dirname, "./uploads")));
+app.use("/test", (req, res) => {
+  res.send("Hello world!");
+});
 app.use(bodyParser.urlencoded({ extended: true, limit: "50mb" }));
 
 // import routes
