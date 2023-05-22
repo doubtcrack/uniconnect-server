@@ -22,11 +22,9 @@ const shopSchema = new mongoose.Schema({
   },
   address: {
     type: String,
-    required: true,
   },
   phoneNumber: {
     type: Number,
-    required: true,
   },
   role: {
     type: String,
@@ -34,12 +32,33 @@ const shopSchema = new mongoose.Schema({
   },
   avatar: {
     type: String,
-    required: true,
   },
-  zipCode: {
+  withdrawMethod: {
+    type: Object,
+  },
+  availableBalance: {
     type: Number,
-    required: true,
+    default: 0,
   },
+  transections: [
+    {
+      amount: {
+        type: Number,
+        required: true,
+      },
+      status: {
+        type: String,
+        default: "Processing",
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now(),
+      },
+      updatedAt: {
+        type: Date,
+      },
+    },
+  ],
   createdAt: {
     type: Date,
     default: Date.now(),

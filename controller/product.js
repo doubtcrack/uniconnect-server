@@ -1,11 +1,12 @@
 const express = require("express");
-const { isSeller, isAuthenticated } = require("../middleware/auth");
+const { isSeller, isAuthenticated, isAdmin } = require("../middleware/auth");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const router = express.Router();
 const Product = require("../model/product");
 const Order = require("../model/order");
 const Shop = require("../model/shop");
-const { upload } = require("../multer");
+const upload = require("../multer");
+const cloudinary = require("../cloudinary");
 const ErrorHandler = require("../utils/ErrorHandler");
 const fs = require("fs");
 
@@ -21,7 +22,14 @@ router.post(
         return next(new ErrorHandler("Shop Id is invalid!", 400));
       } else {
         const files = req.files;
-        const imageUrls = files.map((file) => `${file.filename}`);
+        const imageUrls = [];
+        for (const file of files) {
+          const result = await cloudinary.uploader.upload(file.path, {
+            folder: "products",
+          });
+          imageUrls.push(result.secure_url);
+        }
+        // const imageUrls = files.map((file) => `${file.filename}`);
 
         const productData = req.body;
         productData.images = imageUrls;
@@ -67,15 +75,9 @@ router.delete(
 
       const productData = await Product.findById(productId);
 
-      productData.images.forEach((imageUrl) => {
-        const filename = imageUrl;
-        const filePath = `uploads/${filename}`;
-
-        fs.unlink(filePath, (err) => {
-          if (err) {
-            console.log(err);
-          }
-        });
+      productData.images.forEach(async (imageUrl) => {
+        const publicId = imageUrl.split("/").slice(-1)[0].split(".")[0];
+        await cloudinary.uploader.destroy("products/" + publicId);
       });
 
       const product = await Product.findByIdAndDelete(productId);
@@ -99,7 +101,7 @@ router.get(
   "/get-all-products",
   catchAsyncErrors(async (req, res, next) => {
     try {
-      const products = await Product.find().sort({createdAt: -1});
+      const products = await Product.find().sort({ createdAt: -1 });
 
       res.status(201).json({
         success: true,
@@ -156,7 +158,7 @@ router.put(
         orderId,
         { $set: { "cart.$[elem].isReviewed": true } },
         { arrayFilters: [{ "elem._id": productId }], new: true }
-      );      
+      );
 
       res.status(200).json({
         success: true,
@@ -168,4 +170,23 @@ router.put(
   })
 );
 
+// all products --- for admin
+router.get(
+  "/admin-all-products",
+  isAuthenticated,
+  isAdmin("Admin"),
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const products = await Product.find().sort({
+        createdAt: -1,
+      });
+      res.status(201).json({
+        success: true,
+        products,
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
 module.exports = router;

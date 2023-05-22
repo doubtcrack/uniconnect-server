@@ -6,8 +6,9 @@ const jwt = require("jsonwebtoken");
 const sendMail = require("../utils/sendMail");
 const sendToken = require("../utils/jwtToken");
 const Shop = require("../model/shop");
-const { isAuthenticated, isSeller } = require("../middleware/auth");
-const { upload } = require("../multer");
+const { isAuthenticated, isSeller, isAdmin } = require("../middleware/auth");
+const upload = require("../multer");
+const cloudinary = require("../cloudinary");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const ErrorHandler = require("../utils/ErrorHandler");
 const sendShopToken = require("../utils/shopToken");
@@ -15,31 +16,35 @@ const sendShopToken = require("../utils/shopToken");
 // create shop
 router.post("/create-shop", upload.single("file"), async (req, res, next) => {
   try {
+    // Upload image to cloudinary
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      folder: "contributor",
+    });
     const { email } = req.body;
     const sellerEmail = await Shop.findOne({ email });
-    if (sellerEmail) {
-      const filename = req.file.filename;
-      const filePath = `uploads/${filename}`;
-      fs.unlink(filePath, (err) => {
-        if (err) {
-          console.log(err);
-          res.status(500).json({ message: "Error deleting file" });
-        }
-      });
-      return next(new ErrorHandler("User already exists", 400));
-    }
+    // if (sellerEmail) {
+    //   const filename = req.file.filename;
+    //   const filePath = `uploads/${filename}`;
+    //   fs.unlink(filePath, (err) => {
+    //     if (err) {
+    //       console.log(err);
+    //       res.status(500).json({ message: "Error deleting file" });
+    //     }
+    //   });
+    //   return next(new ErrorHandler("User already exists", 400));
+    // }
 
-    const filename = req.file.filename;
-    const fileUrl = path.join(filename);
+    // const filename = req.file.filename;
+    // const fileUrl = path.join(filename);
 
     const seller = {
       name: req.body.name,
       email: email,
       password: req.body.password,
-      avatar: fileUrl,
+      avatar: result.secure_url,
+      cloudinary_id: result.public_id,
       address: req.body.address,
       phoneNumber: req.body.phoneNumber,
-      zipCode: req.body.zipCode,
     };
 
     const activationToken = createActivationToken(seller);
@@ -86,8 +91,15 @@ router.post(
       if (!newSeller) {
         return next(new ErrorHandler("Invalid token", 400));
       }
-      const { name, email, password, avatar, zipCode, address, phoneNumber } =
-        newSeller;
+      const {
+        name,
+        email,
+        password,
+        avatar,
+        cloudinary_id,
+        address,
+        phoneNumber,
+      } = newSeller;
 
       let seller = await Shop.findOne({ email });
 
@@ -100,7 +112,7 @@ router.post(
         email,
         avatar,
         password,
-        zipCode,
+        cloudinary_id,
         address,
         phoneNumber,
       });
@@ -210,14 +222,16 @@ router.put(
     try {
       const existsUser = await Shop.findById(req.seller._id);
 
-      const existAvatarPath = `uploads/${existsUser.avatar}`;
+      // Delete image from cloudinary
+      await cloudinary.uploader.destroy(existsUser.cloudinary_id);
 
-      fs.unlinkSync(existAvatarPath);
+      // Upload image to cloudinary
 
-      const fileUrl = path.join(req.file.filename);
+      const res = await cloudinary.uploader.upload(req.file.path);
 
       const seller = await Shop.findByIdAndUpdate(req.seller._id, {
-        avatar: fileUrl,
+        avatar: res?.secure_url,
+        cloudinary_id: res?.public_id,
       });
 
       res.status(200).json({
@@ -236,7 +250,7 @@ router.put(
   isSeller,
   catchAsyncErrors(async (req, res, next) => {
     try {
-      const { name, description, address, phoneNumber, zipCode } = req.body;
+      const { name, description, address, phoneNumber } = req.body;
 
       const shop = await Shop.findOne(req.seller._id);
 
@@ -248,13 +262,107 @@ router.put(
       shop.description = description;
       shop.address = address;
       shop.phoneNumber = phoneNumber;
-      shop.zipCode = zipCode;
 
       await shop.save();
 
       res.status(201).json({
         success: true,
         shop,
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+// all sellers --- for admin
+router.get(
+  "/admin-all-sellers",
+  isAuthenticated,
+  isAdmin("Admin"),
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const sellers = await Shop.find().sort({
+        createdAt: -1,
+      });
+      res.status(201).json({
+        success: true,
+        sellers,
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+// delete seller ---admin
+router.delete(
+  "/delete-seller/:id",
+  isAuthenticated,
+  isAdmin("Admin"),
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const seller = await Shop.findById(req.params.id);
+
+      if (!seller) {
+        return next(
+          new ErrorHandler("Seller is not available with this id", 400)
+        );
+      }
+
+      await Shop.findByIdAndDelete(req.params.id);
+
+      res.status(201).json({
+        success: true,
+        message: "Seller deleted successfully!",
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+// update seller withdraw methods --- sellers
+router.put(
+  "/update-payment-methods",
+  isSeller,
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const { withdrawMethod } = req.body;
+
+      const seller = await Shop.findByIdAndUpdate(req.seller._id, {
+        withdrawMethod,
+      });
+
+      res.status(201).json({
+        success: true,
+        seller,
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+// delete seller withdraw merthods --- only seller
+router.delete(
+  "/delete-withdraw-method/",
+  isSeller,
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const seller = await Shop.findById(req.seller._id);
+
+      if (!seller) {
+        return next(new ErrorHandler("Seller not found with this id", 400));
+      }
+
+      seller.withdrawMethod = null;
+
+      await seller.save();
+
+      res.status(201).json({
+        success: true,
+        seller,
       });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));

@@ -2,41 +2,48 @@ const express = require("express");
 const path = require("path");
 const User = require("../model/user");
 const router = express.Router();
-const { upload } = require("../multer");
+const upload = require("../multer");
+const cloudinary = require("../cloudinary");
 const ErrorHandler = require("../utils/ErrorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const sendMail = require("../utils/sendMail");
 const sendToken = require("../utils/jwtToken");
-const { isAuthenticated } = require("../middleware/auth");
-const user = require("../model/user");
+const { isAuthenticated, isAdmin } = require("../middleware/auth");
 
 router.post("/create-user", upload.single("file"), async (req, res, next) => {
   try {
+    // Upload image to cloudinary
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      folder: "profile",
+    });
+    // console.log(req);
+
     const { name, email, password } = req.body;
     const userEmail = await User.findOne({ email });
 
-    if (userEmail) {
-      const filename = req.file.filename;
-      const filePath = `uploads/${filename}`;
-      fs.unlink(filePath, (err) => {
-        if (err) {
-          console.log(err);
-          res.status(500).json({ message: "Error deleting file" });
-        }
-      });
-      return next(new ErrorHandler("User already exists", 400));
-    }
+    // if (userEmail) {
+    //   const filename = req.file.filename;
+    //   const filePath = `uploads/${filename}`;
+    //   fs.unlink(filePath, (err) => {
+    //     if (err) {
+    //       console.log(err);
+    //       res.status(500).json({ message: "Error deleting file" });
+    //     }
+    //   });
+    //   return next(new ErrorHandler("User already exists", 400));
+    // }
 
-    const filename = req.file.filename;
-    const fileUrl = path.join(filename);
+    // const filename = req.file.filename;
+    // const fileUrl = path.join(filename);
 
     const user = {
       name: name,
       email: email,
       password: password,
-      avatar: fileUrl,
+      avatar: result.secure_url,
+      cloudinary_id: result.public_id,
     };
 
     const activationToken = createActivationToken(user);
@@ -83,7 +90,7 @@ router.post(
       if (!newUser) {
         return next(new ErrorHandler("Invalid token", 400));
       }
-      const { name, email, password, avatar } = newUser;
+      const { name, email, password, avatar, cloudinary_id } = newUser;
 
       let user = await User.findOne({ email });
 
@@ -95,6 +102,7 @@ router.post(
         email,
         avatar,
         password,
+        cloudinary_id,
       });
 
       sendToken(user, 201, res);
@@ -224,14 +232,16 @@ router.put(
     try {
       const existsUser = await User.findById(req.user.id);
 
-      const existAvatarPath = `uploads/${existsUser.avatar}`;
+      // Delete image from cloudinary
+      await cloudinary.uploader.destroy(existsUser.cloudinary_id);
 
-      fs.unlinkSync(existAvatarPath);
+      // Upload image to cloudinary
 
-      const fileUrl = path.join(req.file.filename);
+      const res = await cloudinary.uploader.upload(req.file.path);
 
       const user = await User.findByIdAndUpdate(req.user.id, {
-        avatar: fileUrl,
+        avatar: res?.secure_url,
+        cloudinary_id: res?.public_id,
       });
 
       res.status(200).json({
@@ -356,6 +366,53 @@ router.get(
       res.status(201).json({
         success: true,
         user,
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+// all users --- for admin
+router.get(
+  "/admin-all-users",
+  isAuthenticated,
+  isAdmin("Admin"),
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const users = await User.find().sort({
+        createdAt: -1,
+      });
+      res.status(201).json({
+        success: true,
+        users,
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+// delete users --- admin
+router.delete(
+  "/delete-user/:id",
+  isAuthenticated,
+  isAdmin("Admin"),
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const user = await User.findById(req.params.id);
+
+      if (!user) {
+        return next(
+          new ErrorHandler("User is not available with this id", 400)
+        );
+      }
+
+      await User.findByIdAndDelete(req.params.id);
+
+      res.status(201).json({
+        success: true,
+        message: "User deleted successfully!",
       });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));

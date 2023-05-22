@@ -9,12 +9,12 @@ const userSchema = new mongoose.Schema({
   },
   email: {
     type: String,
-    required: [true, "Please enter your email address"],
+    required: [true, "Please enter your email!"],
   },
   password: {
     type: String,
     required: [true, "Please enter your password"],
-    minLength: [6, "Password should be greater than 6 characters"],
+    minLength: [4, "Password should be greater than 4 characters"],
     select: false,
   },
   phoneNumber: {
@@ -48,7 +48,6 @@ const userSchema = new mongoose.Schema({
   },
   avatar: {
     type: String,
-    required: true,
   },
   createdAt: {
     type: Date,
@@ -58,11 +57,12 @@ const userSchema = new mongoose.Schema({
   resetPasswordTime: Date,
 });
 
-// Hash password
+//  Hash password
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
     next();
   }
+
   this.password = await bcrypt.hash(this.password, 10);
 });
 
@@ -73,7 +73,7 @@ userSchema.methods.getJwtToken = function () {
   });
 };
 
-// comapre password
+// compare password
 userSchema.methods.comparePassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };

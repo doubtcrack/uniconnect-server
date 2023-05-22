@@ -2,21 +2,28 @@ const Messages = require("../model/messages");
 const ErrorHandler = require("../utils/ErrorHandler");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const express = require("express");
-const { upload } = require("../multer");
+const path = require("path");
+const upload = require("../multer");
+const cloudinary = require("../cloudinary");
 const router = express.Router();
 
 // create new message
 router.post(
   "/create-new-message",
-  upload.array("images"),
+  upload.single("images"),
   catchAsyncErrors(async (req, res, next) => {
     try {
+      // Upload image to cloudinary
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: "conversation",
+      });
+
       const messageData = req.body;
 
-      if (req.files) {
-        const files = req.files;
-        const imageUrls = files.map((file) => `${file.fileName}`);
-        messageData.images = imageUrls;
+      if (req.file) {
+        // const filename = req.file.filename;
+        // const fileUrl = path.join(filename);
+        messageData.images = result.secure_url;
       }
 
       messageData.conversationId = req.body.conversationId;
@@ -37,7 +44,7 @@ router.post(
         message,
       });
     } catch (error) {
-      return next(new ErrorHandler(error.response.message), 500);
+      return next(new ErrorHandler(error.message), 500);
     }
   })
 );
@@ -56,7 +63,7 @@ router.get(
         messages,
       });
     } catch (error) {
-      return next(new ErrorHandler(error.response.message), 500);
+      return next(new ErrorHandler(error.message), 500);
     }
   })
 );
