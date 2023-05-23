@@ -12,6 +12,7 @@ const cloudinary = require("../cloudinary");
 const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const ErrorHandler = require("../utils/ErrorHandler");
 const sendShopToken = require("../utils/shopToken");
+const activateTemplateEmail = require("../emailTemplates/activate");
 
 // create shop
 router.post("/create-shop", upload.single("file"), async (req, res, next) => {
@@ -54,8 +55,10 @@ router.post("/create-shop", upload.single("file"), async (req, res, next) => {
     try {
       await sendMail({
         email: seller.email,
-        subject: "Activate your Shop",
-        message: `Hello ${seller.name}, please click on the link to activate your shop: ${activationUrl}`,
+        name: seller.name,
+        url: activationUrl,
+        subject: "Activate your Contribution Space Account",
+        template: activateTemplateEmail,
       });
       res.status(201).json({
         success: true,
