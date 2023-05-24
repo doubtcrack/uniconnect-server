@@ -10,13 +10,15 @@ const router = express.Router();
 // create new message
 router.post(
   "/create-new-message",
-  upload.single("images"),
+  upload?.single("images"),
   catchAsyncErrors(async (req, res, next) => {
     try {
       // Upload image to cloudinary
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: "conversation",
-      });
+      const result = req.file
+        ? await cloudinary.uploader.upload(req.file.path, {
+            folder: "conversation",
+          })
+        : null;
 
       const messageData = req.body;
 
