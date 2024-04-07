@@ -17,31 +17,26 @@ const activateTemplateEmail = require("../emailTemplates/activate");
 // create shop
 router.post("/create-shop", upload.single("file"), async (req, res, next) => {
   try {
+    if (!req.file?.path) {
+      return res.status(400).json({ message: "Upload Profile Avatar" });
+    }
     // Upload image to cloudinary
     const result = await cloudinary.uploader.upload(req.file.path, {
       folder: "contributor",
     });
-    const { email } = req.body;
+    const { name, email, password } = req.body;
     const sellerEmail = await Shop.findOne({ email });
-    // if (sellerEmail) {
-    //   const filename = req.file.filename;
-    //   const filePath = `uploads/${filename}`;
-    //   fs.unlink(filePath, (err) => {
-    //     if (err) {
-    //       console.log(err);
-    //       res.status(500).json({ message: "Error deleting file" });
-    //     }
-    //   });
-    //   return next(new ErrorHandler("User already exists", 400));
-    // }
+    if (sellerEmail) {
+      return res.status(400).json({ message: "Account already exists" });
+    }
 
-    // const filename = req.file.filename;
-    // const fileUrl = path.join(filename);
-
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Please Enter all Fields" });
+    }
     const seller = {
-      name: req.body.name,
+      name: name,
       email: email,
-      password: req.body.password,
+      password: password,
       avatar: result.secure_url,
       cloudinary_id: result.public_id,
       address: req.body.address,

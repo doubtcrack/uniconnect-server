@@ -13,9 +13,11 @@ const productSchema = new mongoose.Schema({
     type: String,
     required: [true, "Please enter your product category!"],
   },
-  tags: {
-    type: String,
-  },
+  tags: [
+    {
+      type: String,
+    },
+  ],
   originalPrice: {
     type: Number,
   },
@@ -46,10 +48,10 @@ const productSchema = new mongoose.Schema({
       productId: {
         type: String,
       },
-      createdAt:{
+      createdAt: {
         type: Date,
         default: Date.now(),
-      }
+      },
     },
   ],
   ratings: {

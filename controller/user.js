@@ -15,15 +15,25 @@ const activateTemplateEmail = require("../emailTemplates/activate");
 
 router.post("/create-user", upload.single("file"), async (req, res, next) => {
   try {
+    if (!req.file?.path) {
+      return res.status(400).json({ message: "Upload Profile Avatar" });
+    }
+
     // Upload image to cloudinary
     const result = await cloudinary.uploader.upload(req.file.path, {
       folder: "profile",
     });
-    // console.log(req);
 
     const { name, email, password } = req.body;
     const userEmail = await User.findOne({ email });
 
+    if (userEmail) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Please Enter all Fields" });
+    }
     const user = {
       name: name,
       email: email,
@@ -221,15 +231,16 @@ router.put(
       const existsUser = await User.findById(req.user.id);
 
       // Delete image from cloudinary
-      await cloudinary.uploader.destroy(existsUser.cloudinary_id);
+      if (existsUser?.cloudinary_id) {
+        await cloudinary.uploader.destroy(existsUser?.cloudinary_id);
+      }
 
       // Upload image to cloudinary
 
-      const res = await cloudinary.uploader.upload(req.file.path);
-
+      const data = await cloudinary.uploader.upload(req.file.path);
       const user = await User.findByIdAndUpdate(req.user.id, {
-        avatar: res?.secure_url,
-        cloudinary_id: res?.public_id,
+        avatar: data?.secure_url,
+        cloudinary_id: data?.public_id,
       });
 
       res.status(200).json({
@@ -342,7 +353,7 @@ router.put(
   })
 );
 
-// find user infoormation with the userId
+// find user information with the userId
 router.get(
   "/user-info/:id",
   catchAsyncErrors(async (req, res, next) => {
